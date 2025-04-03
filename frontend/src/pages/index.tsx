@@ -52,7 +52,7 @@ export default function Home() {
     if (!API_URL) return; // Don't fetch if URL is missing
     try {
       setError(null);
-      const response = await fetch(API_URL);
+      const response = await fetch(`${API_URL}/api/todos`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -71,7 +71,7 @@ export default function Home() {
 
     try {
       setError(null);
-      const response = await fetch(API_URL, {
+      const response = await fetch(`${API_URL}/api/todos`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -100,7 +100,7 @@ export default function Home() {
     if (!API_URL) return; // Check API_URL
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/${id}`, {
+      const response = await fetch(`${API_URL}/api/todos/${id}`, {
         method: "DELETE",
       });
 
