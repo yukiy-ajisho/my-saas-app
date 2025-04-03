@@ -49,7 +49,7 @@ export default function Home() {
   }, []);
 
   const fetchTodos = async () => {
-    if (!API_URL) return; // Don't fetch if URL is missing sad
+    if (!API_URL) return; // Don't fetch if URL is missing saddsads
     try {
       setError(null);
       const response = await fetch(`${API_URL}/api/todos`);
