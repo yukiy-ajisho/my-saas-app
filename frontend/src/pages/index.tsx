@@ -10,7 +10,15 @@ interface Todo {
   created_at: string;
 }
 
-const API_URL = "http://localhost:3001/api/todos";
+// Read API URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_URL) {
+  // Provide a fallback or throw an error if the variable isn't set
+  console.error("Error: NEXT_PUBLIC_API_URL environment variable is not set.");
+  // You might want to throw an error or set a default for local dev here
+  // For now, we'll let it potentially fail later if unset, but log the error.
+}
 
 // Custom Arrow Components for the Slider
 const PrevArrow = ({ onClick }: CustomArrowProps) => {
@@ -41,6 +49,7 @@ export default function Home() {
   }, []);
 
   const fetchTodos = async () => {
+    if (!API_URL) return; // Don't fetch if URL is missing
     try {
       setError(null);
       const response = await fetch(API_URL);
@@ -58,7 +67,7 @@ export default function Home() {
 
   const handleAddTask = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!newTask.trim()) return; // Don't add empty tasks
+    if (!newTask.trim() || !API_URL) return; // Check API_URL
 
     try {
       setError(null);
@@ -88,6 +97,7 @@ export default function Home() {
   };
 
   const handleDeleteTodo = async (id: string) => {
+    if (!API_URL) return; // Check API_URL
     try {
       setError(null);
       const response = await fetch(`${API_URL}/${id}`, {
