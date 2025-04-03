@@ -1,5 +1,7 @@
 import Head from "next/head";
-import { useState, useEffect, FormEvent, ChangeEvent } from "react";
+import { useState, useEffect, FormEvent, ChangeEvent, useRef } from "react";
+import Slider from "react-slick";
+import type { Settings, CustomArrowProps } from "react-slick"; // Import specific types
 
 interface Todo {
   id: string; // Assuming Supabase uses uuid which is a string
@@ -10,10 +12,28 @@ interface Todo {
 
 const API_URL = "http://localhost:3001/api/todos";
 
+// Custom Arrow Components for the Slider
+const PrevArrow = ({ onClick }: CustomArrowProps) => {
+  return (
+    <button onClick={onClick} style={{ ...styles.arrow, ...styles.prevArrow }}>
+      &lt;
+    </button>
+  );
+};
+
+const NextArrow = ({ onClick }: CustomArrowProps) => {
+  return (
+    <button onClick={onClick} style={{ ...styles.arrow, ...styles.nextArrow }}>
+      &gt;
+    </button>
+  );
+};
+
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTask, setNewTask] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const sliderRef = useRef<Slider>(null); // Ref for slider instance
 
   // Fetch todos on initial load
   useEffect(() => {
@@ -56,8 +76,11 @@ export default function Home() {
 
       const addedTodo: Todo = await response.json();
       // Add the new todo to the beginning of the list
-      setTodos([addedTodo, ...todos]);
+      const newTodos = [addedTodo, ...todos];
+      setTodos(newTodos);
       setNewTask(""); // Clear the input field
+      // Go to the first slide after adding a new task
+      sliderRef.current?.slickGoTo(0);
     } catch (e: any) {
       console.error("Failed to add todo:", e);
       setError("Failed to add todo.");
@@ -86,6 +109,30 @@ export default function Home() {
       console.error("Failed to delete todo:", e);
       setError(`Failed to delete todo: ${e.message}`);
     }
+  };
+
+  const sliderSettings: Settings = {
+    dots: false,
+    infinite: false, // Don't loop infinitely
+    speed: 500,
+    slidesToShow: 3, // Show 3 cards at a time
+    slidesToScroll: 1, // Scroll 1 card at a time
+    prevArrow: <PrevArrow />,
+    nextArrow: <NextArrow />,
+    responsive: [
+      {
+        breakpoint: 1024,
+        settings: {
+          slidesToShow: 2,
+        },
+      },
+      {
+        breakpoint: 600,
+        settings: {
+          slidesToShow: 1,
+        },
+      },
+    ],
   };
 
   return (
@@ -119,26 +166,29 @@ export default function Home() {
           </button>
         </form>
 
-        <ul style={styles.list}>
-          {todos.length === 0 && !error && <p>No todos yet!</p>}
-          {todos.map((todo) => (
-            <li key={todo.id} style={styles.listItem}>
-              <span
-                style={{
-                  textDecoration: todo.is_completed ? "line-through" : "none",
-                }}
-              >
-                {todo.task}
-              </span>
-              <button
-                onClick={() => handleDeleteTodo(todo.id)}
-                style={styles.deleteButton}
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
+        {/* Slider container */}
+        <div style={styles.sliderContainer}>
+          {todos.length > 0 ? (
+            <Slider ref={sliderRef} {...sliderSettings}>
+              {todos.map((todo) => (
+                // Each div here is a slide
+                <div key={todo.id} style={styles.slidePadding}>
+                  <div style={styles.card}>
+                    <span style={styles.cardTask}>{todo.task}</span>
+                    <button
+                      onClick={() => handleDeleteTodo(todo.id)}
+                      style={styles.deleteButton}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </Slider>
+          ) : (
+            !error && <p>No todos yet! Add one above.</p>
+          )}
+        </div>
       </main>
     </div>
   );
@@ -191,6 +241,8 @@ const styles = {
     fontSize: "1rem",
     cursor: "pointer",
   },
+  // Remove old list styles
+  /*
   list: {
     listStyle: "none",
     padding: 0,
@@ -204,6 +256,35 @@ const styles = {
     padding: "0.75rem",
     borderBottom: "1px solid #eee",
   },
+  */
+
+  // New Slider and Card Styles
+  sliderContainer: {
+    width: "90%", // Adjust width as needed
+    maxWidth: "800px",
+    margin: "2rem 0",
+    position: "relative" as "relative",
+  },
+  slidePadding: {
+    padding: "0 10px", // Add space between cards
+  },
+  card: {
+    background: "#f9f9f9",
+    border: "1px solid #eee",
+    borderRadius: "8px",
+    padding: "1.5rem",
+    minHeight: "100px", // Ensure cards have some height
+    display: "flex",
+    flexDirection: "column" as "column",
+    justifyContent: "space-between",
+    alignItems: "center",
+    textAlign: "center" as "center",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+  },
+  cardTask: {
+    marginBottom: "1rem", // Space between task and delete button
+    wordBreak: "break-word" as "break-word",
+  },
   deleteButton: {
     padding: "0.4rem 0.8rem",
     border: "none",
@@ -212,5 +293,30 @@ const styles = {
     color: "white",
     fontSize: "0.9rem",
     cursor: "pointer",
+    marginTop: "auto", // Push delete button to the bottom if needed
+  },
+  arrow: {
+    position: "absolute" as "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    color: "white",
+    border: "none",
+    borderRadius: "50%",
+    width: "40px",
+    height: "40px",
+    fontSize: "20px",
+    cursor: "pointer",
+    zIndex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+  },
+  prevArrow: {
+    left: "-50px", // Position left arrow outside the container
+  },
+  nextArrow: {
+    right: "-50px", // Position right arrow outside the container
   },
 };
