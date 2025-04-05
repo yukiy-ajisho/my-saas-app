@@ -2,8 +2,8 @@ import Head from "next/head";
 import { useState, useEffect, FormEvent, ChangeEvent, useRef } from "react";
 import Slider from "react-slick";
 import type { Settings, CustomArrowProps } from "react-slick"; // Import specific types
-import { supabase } from "@/lib/supabaseClient"; // Import Supabase client
-import type { Session, User } from "@supabase/supabase-js"; // Import types
+import { createBrowserClient } from "@supabase/ssr";
+import type { Session, User, SupabaseClient } from "@supabase/supabase-js";
 
 interface Todo {
   id: string; // Assuming Supabase uses uuid which is a string
@@ -12,6 +12,9 @@ interface Todo {
   created_at: string;
   user_id: string; // Added user_id
 }
+
+// Define a type for the Supabase client
+type TypedSupabaseClient = SupabaseClient<Record<string, any>>; // Use a generic or define your DB types
 
 // Read API URL from environment variable
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -41,9 +44,15 @@ const NextArrow = ({ onClick }: CustomArrowProps) => {
 };
 
 export default function Home() {
-  const [session, setSession] = useState<Session | null>(null); // Add session state
-  const [user, setUser] = useState<User | null>(null); // Add user state
-  const [loading, setLoading] = useState<boolean>(true); // Loading state for auth
+  const [supabase] = useState<TypedSupabaseClient>(() =>
+    createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+  );
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTask, setNewTask] = useState<string>("");
@@ -52,7 +61,17 @@ export default function Home() {
 
   // --- Auth Handling ---
   useEffect(() => {
-    const getSession = async () => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("Auth State Change:", _event, session);
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Initial session check
+    const getInitialSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -60,44 +79,37 @@ export default function Home() {
       setUser(session?.user ?? null);
       setLoading(false);
     };
+    getInitialSession();
 
-    getSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    // Cleanup listener on component unmount
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
-  }, []);
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]); // Depend on supabase.auth
 
   const handleLogin = async () => {
+    setError(null); // Clear previous errors
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
+        options: {
+          // Optional: Specify where to redirect AFTER login completes
+          // Defaults to current page if not set
+          redirectTo: window.location.origin,
+        },
       });
       if (error) throw error;
+      // Note: Redirection happens, state updates via onAuthStateChange
     } catch (error: any) {
-      // Define type for error
       setError(`Google Login Failed: ${error.message}`);
       console.error("Google Login Error:", error);
     }
   };
 
   const handleLogout = async () => {
+    setError(null); // Clear previous errors
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setTodos([]); // Clear todos on logout
-      setError(null);
     } catch (error: any) {
-      // Define type for error
       setError(`Logout Failed: ${error.message}`);
       console.error("Logout Error:", error);
     }
@@ -107,6 +119,8 @@ export default function Home() {
   useEffect(() => {
     if (session) {
       fetchTodos();
+    } else {
+      setTodos([]); // Clear todos if session becomes null (logout)
     }
   }, [session]); // Re-run when session changes
 
@@ -116,11 +130,10 @@ export default function Home() {
     if (!API_URL || !session) return;
     try {
       setError(null);
-      // Explicitly construct headers
-      const headers: HeadersInit = {
-        Authorization: `Bearer ${session.access_token}`,
-      };
-      const response = await fetch(`${API_URL}/api/todos`, { headers });
+      // Browser sends cookie automatically, remove Authorization header
+      const response = await fetch(`${API_URL}/api/todos`, {
+        credentials: "include",
+      }); // IMPORTANT: include credentials
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           setError("Authentication failed. Please log in again.");
@@ -144,18 +157,17 @@ export default function Home() {
   const handleAddTask = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!newTask.trim() || !API_URL || !session) return;
-
     try {
       setError(null);
-      // Explicitly construct headers
+      // Remove Authorization header, browser sends cookie
       const headers: HeadersInit = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
       };
       const response = await fetch(`${API_URL}/api/todos`, {
         method: "POST",
         headers,
         body: JSON.stringify({ task: newTask }),
+        credentials: "include", // IMPORTANT: include credentials
       });
 
       if (!response.ok) {
@@ -181,13 +193,10 @@ export default function Home() {
     if (!API_URL || !session) return;
     try {
       setError(null);
-      // Explicitly construct headers
-      const headers: HeadersInit = {
-        Authorization: `Bearer ${session.access_token}`,
-      };
+      // Remove Authorization header, browser sends cookie
       const response = await fetch(`${API_URL}/api/todos/${id}`, {
         method: "DELETE",
-        headers,
+        credentials: "include", // IMPORTANT: include credentials
       });
 
       if (!response.ok) {
