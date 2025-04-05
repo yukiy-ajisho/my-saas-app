@@ -36,26 +36,47 @@ export default async function handler(
             return cookies[name];
           },
           set(name: string, value: string, options: CookieOptions) {
-            // Ensure previous cookies aren't overwritten if multiple are set
+            // --- Force required attributes for cross-site cookies ---
+            const secure = process.env.NODE_ENV === "production"; // Secure only in production (HTTPS)
+            const finalOptions: CookieOptions = {
+              ...options,
+              path: "/", // Ensure cookie is valid for all paths
+              sameSite: "lax", // Start with Lax for broader compatibility
+              secure: secure, // Set secure based on environment
+            };
+            // If deploying frontend and backend to different subdomains of the same root domain,
+            // you might set `domain: 'your-root-domain.com'` here.
+            // For completely different domains (Vercel/Render), SameSite=None is usually needed,
+            // BUT browsers are increasingly blocking third-party cookies.
+            // Let's stick with Lax for now as Supabase often manages ok, but if issues persist,
+            // we might need SameSite=None and ensure Secure=true ALWAYS.
+            console.log(`Setting cookie ${name} with options:`, finalOptions);
+
             let setCookieHeader = res.getHeader("Set-Cookie") || [];
-            // Ensure it's an array
             if (!Array.isArray(setCookieHeader)) {
               setCookieHeader = [setCookieHeader.toString()];
             }
             res.setHeader("Set-Cookie", [
               ...setCookieHeader,
-              serialize(name, value, options),
+              serialize(name, value, finalOptions),
             ]);
           },
           remove(name: string, options: CookieOptions) {
+            const finalOptions: CookieOptions = {
+              ...options,
+              path: "/", // Match the path used in set
+              maxAge: -1, // Use maxAge: -1 for reliable removal
+            };
+            console.log(`Removing cookie ${name} with options:`, finalOptions);
+
             let setCookieHeader = res.getHeader("Set-Cookie") || [];
             if (!Array.isArray(setCookieHeader)) {
               setCookieHeader = [setCookieHeader.toString()];
             }
             res.setHeader("Set-Cookie", [
               ...setCookieHeader,
-              serialize(name, "", { ...options, maxAge: -1 }),
-            ]); // Use maxAge: -1 for removal
+              serialize(name, "", finalOptions),
+            ]);
           },
         },
       }
@@ -66,7 +87,7 @@ export default async function handler(
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) throw error;
       console.log(
-        "Auth callback: Code exchanged successfully, cookie set via createServerClient."
+        "Auth callback: Code exchanged successfully, cookie set via createServerClient with forced options."
       );
     } catch (error) {
       console.error("Auth callback error exchanging code:", error);
