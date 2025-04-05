@@ -2,12 +2,15 @@ import Head from "next/head";
 import { useState, useEffect, FormEvent, ChangeEvent, useRef } from "react";
 import Slider from "react-slick";
 import type { Settings, CustomArrowProps } from "react-slick"; // Import specific types
+import { supabase } from "@/lib/supabaseClient"; // Import Supabase client
+import type { Session, User } from "@supabase/supabase-js"; // Import types
 
 interface Todo {
   id: string; // Assuming Supabase uses uuid which is a string
   task: string;
   is_completed: boolean;
   created_at: string;
+  user_id: string; // Added user_id
 }
 
 // Read API URL from environment variable
@@ -38,58 +41,136 @@ const NextArrow = ({ onClick }: CustomArrowProps) => {
 };
 
 export default function Home() {
+  const [session, setSession] = useState<Session | null>(null); // Add session state
+  const [user, setUser] = useState<User | null>(null); // Add user state
+  const [loading, setLoading] = useState<boolean>(true); // Loading state for auth
+
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTask, setNewTask] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const sliderRef = useRef<Slider>(null); // Ref for slider instance
 
-  // Fetch todos on initial load
+  // --- Auth Handling ---
   useEffect(() => {
-    fetchTodos();
+    const getSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    };
+
+    getSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    // Cleanup listener on component unmount
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
+  const handleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      // Define type for error
+      setError(`Google Login Failed: ${error.message}`);
+      console.error("Google Login Error:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setTodos([]); // Clear todos on logout
+      setError(null);
+    } catch (error: any) {
+      // Define type for error
+      setError(`Logout Failed: ${error.message}`);
+      console.error("Logout Error:", error);
+    }
+  };
+
+  // Fetch todos only when session changes and is valid
+  useEffect(() => {
+    if (session) {
+      fetchTodos();
+    }
+  }, [session]); // Re-run when session changes
+
+  // --- API Call Modifications ---
+
   const fetchTodos = async () => {
-    if (!API_URL) return; // Don't fetch if URL is missing saddsads
+    if (!API_URL || !session) return;
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/api/todos`);
+      // Explicitly construct headers
+      const headers: HeadersInit = {
+        Authorization: `Bearer ${session.access_token}`,
+      };
+      const response = await fetch(`${API_URL}/api/todos`, { headers });
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.status === 401 || response.status === 403) {
+          setError("Authentication failed. Please log in again.");
+          setTodos([]);
+        } else {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      } else {
+        const data: Todo[] = await response.json();
+        setTodos(data);
       }
-      const data: Todo[] = await response.json();
-      setTodos(data);
     } catch (e: any) {
-      // Catch specific error types if known
       console.error("Failed to fetch todos:", e);
-      setError("Failed to load todos. Is the backend running?");
+      setError(
+        "Failed to load todos. Is the backend running and are you logged in?"
+      );
+      setTodos([]);
     }
   };
 
   const handleAddTask = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!newTask.trim() || !API_URL) return; // Check API_URL
+    if (!newTask.trim() || !API_URL || !session) return;
 
     try {
       setError(null);
+      // Explicitly construct headers
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      };
       const response = await fetch(`${API_URL}/api/todos`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({ task: newTask }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.status === 401 || response.status === 403) {
+          setError("Authentication failed. Cannot add todo.");
+        } else {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      } else {
+        const addedTodo: Todo = await response.json();
+        const newTodos = [addedTodo, ...todos];
+        setTodos(newTodos);
+        setNewTask("");
+        sliderRef.current?.slickGoTo(0);
       }
-
-      const addedTodo: Todo = await response.json();
-      // Add the new todo to the beginning of the list
-      const newTodos = [addedTodo, ...todos];
-      setTodos(newTodos);
-      setNewTask(""); // Clear the input field
-      // Go to the first slide after adding a new task
-      sliderRef.current?.slickGoTo(0);
     } catch (e: any) {
       console.error("Failed to add todo:", e);
       setError("Failed to add todo.");
@@ -97,24 +178,33 @@ export default function Home() {
   };
 
   const handleDeleteTodo = async (id: string) => {
-    if (!API_URL) return; // Check API_URL
+    if (!API_URL || !session) return;
     try {
       setError(null);
+      // Explicitly construct headers
+      const headers: HeadersInit = {
+        Authorization: `Bearer ${session.access_token}`,
+      };
       const response = await fetch(`${API_URL}/api/todos/${id}`, {
         method: "DELETE",
+        headers,
       });
 
       if (!response.ok) {
-        // Handle cases where the server indicates failure (e.g., not found)
-        if (response.status === 404) {
-          throw new Error("Todo not found on server.");
+        if (response.status === 401 || response.status === 403) {
+          setError("Authentication failed. Cannot delete todo.");
+        } else if (response.status === 404) {
+          console.warn(
+            "Attempted to delete non-existent or unauthorized todo:",
+            id
+          );
+          setTodos(todos.filter((todo) => todo.id !== id));
         } else {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+      } else {
+        setTodos(todos.filter((todo) => todo.id !== id));
       }
-
-      // Filter out the deleted todo from the state
-      setTodos(todos.filter((todo) => todo.id !== id));
     } catch (e: any) {
       console.error("Failed to delete todo:", e);
       setError(`Failed to delete todo: ${e.message}`);
@@ -145,6 +235,17 @@ export default function Home() {
     ],
   };
 
+  // --- Render Logic ---
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <main style={styles.main}>
+          <p>Loading...</p>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.container}>
       <Head>
@@ -159,46 +260,66 @@ export default function Home() {
       <main style={styles.main}>
         <h1 style={styles.title}>My Todos</h1>
 
-        {error && <p style={styles.error}>{error}</p>}
-
-        <form onSubmit={handleAddTask} style={styles.form}>
-          <input
-            type="text"
-            value={newTask}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setNewTask(e.target.value)
-            }
-            placeholder="Add a new todo"
-            style={styles.input}
-          />
-          <button type="submit" style={styles.button}>
-            Add
-          </button>
-        </form>
-
-        {/* Slider container */}
-        <div style={styles.sliderContainer}>
-          {todos.length > 0 ? (
-            <Slider ref={sliderRef} {...sliderSettings}>
-              {todos.map((todo) => (
-                // Each div here is a slide
-                <div key={todo.id} style={styles.slidePadding}>
-                  <div style={styles.card}>
-                    <span style={styles.cardTask}>{todo.task}</span>
-                    <button
-                      onClick={() => handleDeleteTodo(todo.id)}
-                      style={styles.deleteButton}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </Slider>
+        {/* Auth Buttons */}
+        <div style={styles.authContainer}>
+          {user ? (
+            <div style={styles.userInfo}>
+              <span>Logged in as: {user.email}</span>
+              <button onClick={handleLogout} style={styles.button}>
+                Logout
+              </button>
+            </div>
           ) : (
-            !error && <p>No todos yet! Add one above.</p>
+            <button onClick={handleLogin} style={styles.button}>
+              Login with Google
+            </button>
           )}
         </div>
+
+        {error && <p style={styles.error}>{error}</p>}
+
+        {/* Only show Todo functionality if logged in */}
+        {session && (
+          <>
+            <form onSubmit={handleAddTask} style={styles.form}>
+              <input
+                type="text"
+                value={newTask}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setNewTask(e.target.value)
+                }
+                placeholder="Add a new todo"
+                style={styles.input}
+              />
+              <button type="submit" style={styles.button}>
+                Add
+              </button>
+            </form>
+
+            <div style={styles.sliderContainer}>
+              {todos.length > 0 ? (
+                <Slider ref={sliderRef} {...sliderSettings}>
+                  {todos.map((todo) => (
+                    // Each div here is a slide
+                    <div key={todo.id} style={styles.slidePadding}>
+                      <div style={styles.card}>
+                        <span style={styles.cardTask}>{todo.task}</span>
+                        <button
+                          onClick={() => handleDeleteTodo(todo.id)}
+                          style={styles.deleteButton}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </Slider>
+              ) : (
+                !error && <p>No todos yet! Add one above.</p> // Show only if logged in and no error
+              )}
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
@@ -219,7 +340,7 @@ const styles = {
     alignItems: "center" as "center",
   },
   title: {
-    margin: "0 0 2rem 0",
+    margin: "0 0 1rem 0", // Reduced bottom margin
     lineHeight: 1.15,
     fontSize: "3rem",
     textAlign: "center" as "center",
@@ -250,6 +371,7 @@ const styles = {
     color: "white",
     fontSize: "1rem",
     cursor: "pointer",
+    whiteSpace: "nowrap" as "nowrap",
   },
   // Remove old list styles
   /*
@@ -328,5 +450,17 @@ const styles = {
   },
   nextArrow: {
     right: "-50px", // Position right arrow outside the container
+  },
+  // Auth Styles
+  authContainer: {
+    marginBottom: "2rem",
+    width: "100%",
+    display: "flex",
+    justifyContent: "center",
+  },
+  userInfo: {
+    display: "flex",
+    alignItems: "center",
+    gap: "1rem",
   },
 };
