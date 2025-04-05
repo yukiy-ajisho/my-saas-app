@@ -2,11 +2,31 @@ require("dotenv").config();
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
-const jwt = require("jsonwebtoken"); // Import jsonwebtoken
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser"); // Import cookie-parser
 
 const app = express();
-const port = process.env.PORT || 3001; // Backend server port
+const port = process.env.PORT || 3001;
 const supabaseJwtSecret = process.env.SUPABASE_JWT_SECRET;
+
+// Extract Supabase project reference from URL for cookie name
+const supabaseUrl = process.env.SUPABASE_URL;
+if (!supabaseUrl) {
+  console.error("Error: SUPABASE_URL is not set.");
+  process.exit(1);
+}
+const projectRefMatch = supabaseUrl.match(
+  /https:\/\/([a-zA-Z0-9]+)\.supabase\.co/
+);
+const supabaseProjectRef = projectRefMatch ? projectRefMatch[1] : null;
+if (!supabaseProjectRef) {
+  console.error(
+    "Error: Could not extract Supabase project reference from URL."
+  );
+  process.exit(1);
+}
+const supabaseAuthCookieName = `sb-${supabaseProjectRef}-auth-token`;
+console.log(`Expecting Supabase auth cookie: ${supabaseAuthCookieName}`);
 
 if (!supabaseJwtSecret) {
   console.error(
@@ -19,39 +39,46 @@ if (!supabaseJwtSecret) {
 app.use(
   cors({
     origin: "https://my-saas-app-ashen.vercel.app", // Allow only your Vercel app
+    credentials: true, // IMPORTANT: Allow cookies to be sent from frontend
   })
 );
-app.use(express.json()); // Parse JSON request bodies
+app.use(cookieParser()); // Use cookie-parser middleware
+app.use(express.json());
 
 // --- Authentication Middleware ---
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+  // Read token from the Supabase auth cookie
+  const token = req.cookies[supabaseAuthCookieName];
 
-  if (token == null) return res.sendStatus(401); // if there isn't any token
+  // --- Comment out or remove Authorization header check ---
+  // const authHeader = req.headers['authorization'];
+  // const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) {
+    console.log("Auth cookie not found or empty.");
+    return res.sendStatus(401);
+  }
 
   jwt.verify(token, supabaseJwtSecret, (err, user) => {
     if (err) {
       console.error("JWT Verification Error:", err.message);
-      return res.sendStatus(403); // Token is no longer valid or signature doesn't match
+      // Handle specific errors if needed (e.g., TokenExpiredError)
+      return res.sendStatus(403);
     }
-    req.user = user; // Attach decoded user payload (contains user ID, email, etc.)
-    // The user object typically contains { sub: user_id, aud: authenticated, role: authenticated, ... }
-    console.log("Authenticated user ID:", req.user.sub); // Log the user ID for confirmation
-    next(); // Proceed to the next middleware or route handler
+    req.user = user;
+    console.log("Authenticated user ID from cookie:", req.user.sub);
+    next();
   });
 };
 
-// Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error("Error: Supabase URL or Key not found in .env file");
-  process.exit(1); // Exit if credentials are not set
+// Supabase configuration (for direct backend use, if any - unchanged)
+// ...
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+if (!supabaseServiceKey) {
+  console.error("Error: SUPABASE_SERVICE_KEY not found in .env file");
+  process.exit(1);
 }
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey); // Use different name if needed
 
 // --- API Routes ---
 
@@ -64,13 +91,14 @@ app.use("/api/todos", authenticateToken, todosRouter);
 
 // Get all todos for the authenticated user
 todosRouter.get("/", async (req, res) => {
-  const userId = req.user.sub; // Get user ID from verified JWT
+  const userId = req.user.sub;
   try {
-    // Fetch todos belonging only to this user
-    const { data, error } = await supabase
+    // Use the admin client here for backend-level access
+    // (or adjust if RLS is used instead)
+    const { data, error } = await supabaseAdmin
       .from("todos")
       .select("*")
-      .eq("user_id", userId) // Filter by user_id
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -90,10 +118,9 @@ todosRouter.post("/", async (req, res) => {
   }
 
   try {
-    // Insert todo with the user_id
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("todos")
-      .insert([{ task: task, is_completed: false, user_id: userId }]) // Add user_id
+      .insert([{ task: task, is_completed: false, user_id: userId }])
       .select();
 
     if (error) throw error;
@@ -110,19 +137,14 @@ todosRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Ensure the user can only delete their own todos
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("todos")
       .delete()
       .eq("id", id)
-      .eq("user_id", userId); // Match both id and user_id
+      .eq("user_id", userId);
 
-    // Check if the delete operation caused an error (e.g., row not found for this user)
-    // Note: Supabase delete doesn't always error if the row doesn't match,
-    // it might just delete 0 rows. A count check could be added if needed.
     if (error) throw error;
 
-    // If no error, assume success (or row didn't exist for this user, which is fine)
     res.status(204).send();
   } catch (error) {
     console.error("Error deleting todo:", id, "for user:", userId, error);
