@@ -2,26 +2,12 @@ import "@/styles/globals.css";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import type { AppProps } from "next/app";
-import { useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
+// We don't need useState or createBrowserClient here anymore
+// as the main client interaction will happen in components/pages
+// and the cookie setting happens in the API route.
 
-// Define a type for the Supabase client
-type TypedSupabaseClient = SupabaseClient<Record<string, any>>;
-
-export default function App({
-  Component,
-  pageProps,
-}: AppProps<{ initialSession?: Session }>) {
-  // Create a new supabase client for each page load
-  const [supabaseClient] = useState<TypedSupabaseClient>(() =>
-    createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-  );
-
-  // Check if Supabase URL and Key are set - basic validation
+function MyApp({ Component, pageProps }: AppProps) {
+  // Basic check for environment variables required by child components/API routes
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -34,5 +20,9 @@ export default function App({
     );
   }
 
-  return <Component {...pageProps} supabaseClient={supabaseClient} />;
+  // Just render the component. Auth state will be managed within the component
+  // using a client created there or context.
+  return <Component {...pageProps} />;
 }
+
+export default MyApp;

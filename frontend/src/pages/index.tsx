@@ -64,7 +64,7 @@ export default function Home() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("Auth State Change:", _event, session);
+      console.log("Auth State Change (Client):", _event, session);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -73,10 +73,11 @@ export default function Home() {
     // Initial session check
     const getInitialSession = async () => {
       const {
-        data: { session },
+        data: { session: initialSession },
       } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
+      console.log("Initial Session (Client):", initialSession);
+      setSession(initialSession);
+      setUser(initialSession?.user ?? null);
       setLoading(false);
     };
     getInitialSession();
@@ -90,9 +91,7 @@ export default function Home() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          // Optional: Specify where to redirect AFTER login completes
-          // Defaults to current page if not set
-          redirectTo: window.location.origin,
+          redirectTo: window.location.href,
         },
       });
       if (error) throw error;
@@ -136,7 +135,9 @@ export default function Home() {
       }); // IMPORTANT: include credentials
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          setError("Authentication failed. Please log in again.");
+          setError(
+            "Authentication failed fetching todos. Please log in again."
+          );
           setTodos([]);
         } else {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -172,7 +173,7 @@ export default function Home() {
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          setError("Authentication failed. Cannot add todo.");
+          setError("Authentication failed adding todo.");
         } else {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -201,7 +202,7 @@ export default function Home() {
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          setError("Authentication failed. Cannot delete todo.");
+          setError("Authentication failed deleting todo.");
         } else if (response.status === 404) {
           console.warn(
             "Attempted to delete non-existent or unauthorized todo:",
