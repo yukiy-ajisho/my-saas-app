@@ -37,20 +37,19 @@ export default async function handler(
           },
           set(name: string, value: string, options: CookieOptions) {
             // --- Force required attributes for cross-site cookies ---
-            const secure = process.env.NODE_ENV === "production"; // Secure only in production (HTTPS)
+            // SameSite=None REQUIRES Secure=true
             const finalOptions: CookieOptions = {
               ...options,
-              path: "/", // Ensure cookie is valid for all paths
-              sameSite: "lax", // Start with Lax for broader compatibility
-              secure: secure, // Set secure based on environment
+              path: "/",
+              sameSite: "none", // Must be None for cross-site credentialed requests
+              secure: true, // Must be true if SameSite=None
             };
-            // If deploying frontend and backend to different subdomains of the same root domain,
-            // you might set `domain: 'your-root-domain.com'` here.
-            // For completely different domains (Vercel/Render), SameSite=None is usually needed,
-            // BUT browsers are increasingly blocking third-party cookies.
-            // Let's stick with Lax for now as Supabase often manages ok, but if issues persist,
-            // we might need SameSite=None and ensure Secure=true ALWAYS.
-            console.log(`Setting cookie ${name} with options:`, finalOptions);
+            // Note: Domain attribute is usually omitted unless dealing with subdomains
+
+            console.log(
+              `Setting cookie ${name} with strict options:`,
+              finalOptions
+            );
 
             let setCookieHeader = res.getHeader("Set-Cookie") || [];
             if (!Array.isArray(setCookieHeader)) {
@@ -62,12 +61,18 @@ export default async function handler(
             ]);
           },
           remove(name: string, options: CookieOptions) {
+            // Ensure removal options match set options for path/secure/samesite
             const finalOptions: CookieOptions = {
               ...options,
-              path: "/", // Match the path used in set
-              maxAge: -1, // Use maxAge: -1 for reliable removal
+              path: "/",
+              sameSite: "none",
+              secure: true,
+              maxAge: -1,
             };
-            console.log(`Removing cookie ${name} with options:`, finalOptions);
+            console.log(
+              `Removing cookie ${name} with strict options:`,
+              finalOptions
+            );
 
             let setCookieHeader = res.getHeader("Set-Cookie") || [];
             if (!Array.isArray(setCookieHeader)) {
