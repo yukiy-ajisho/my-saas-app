@@ -67,7 +67,7 @@ export default async function handler(
 
   const { slug } = req.query; // slug will be an array like ['todos'] or ['todos', 'some-id']
   const path = Array.isArray(slug) ? slug.join("/") : "";
-  const targetUrl = `${RENDER_BACKEND_URL}/${path}`;
+  const targetUrl = `${RENDER_BACKEND_URL}/api/${path}`;
 
   console.log(`Proxying request: ${req.method} ${targetUrl}`);
 
