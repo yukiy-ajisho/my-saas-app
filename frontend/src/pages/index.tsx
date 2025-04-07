@@ -88,10 +88,14 @@ export default function Home() {
   const handleLogin = async () => {
     setError(null); // Clear previous errors
     try {
+      // Construct the callback URL dynamically
+      const redirectUrl = `${window.location.origin}/api/auth/callback`;
+      console.log("Initiating login, redirectTo:", redirectUrl); // Add log
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: window.location.href,
+          redirectTo: redirectUrl,
         },
       });
       if (error) throw error;
