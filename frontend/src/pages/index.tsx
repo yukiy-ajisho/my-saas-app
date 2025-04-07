@@ -99,6 +99,7 @@ export default function Home() {
       setError(`Google Login Failed: ${error.message}`);
       console.error("Google Login Error:", error);
     }
+    
   };
 
   const handleLogout = async () => {
