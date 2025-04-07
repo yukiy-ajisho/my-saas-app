@@ -1,5 +1,6 @@
-import { createPagesServerClient } from "@supabase/ssr";
+import { type CookieOptions, createServerClient } from "@supabase/ssr";
 import type { NextApiRequest, NextApiResponse } from "next";
+import { serialize, parse } from "cookie";
 
 // The actual backend URL - Read from environment variable for flexibility
 const RENDER_BACKEND_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -15,12 +16,39 @@ export default async function handler(
     return res.status(500).json({ error: "Proxy configuration error" });
   }
 
-  // Create Supabase client to validate user session from cookie
-  const supabase = createPagesServerClient(
-    { req, res },
+  // Create Supabase client using createServerClient with cookie handlers
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      cookies: {
+        get(name: string) {
+          const cookies = parse(req.headers.cookie || "");
+          return cookies[name];
+        },
+        // Set and Remove are generally not needed when just *reading* the session
+        // in a proxy route, but we include them for completeness or future use.
+        set(name: string, value: string, options: CookieOptions) {
+          let setCookieHeader = res.getHeader("Set-Cookie") || [];
+          if (!Array.isArray(setCookieHeader)) {
+            setCookieHeader = [setCookieHeader.toString()];
+          }
+          res.setHeader("Set-Cookie", [
+            ...setCookieHeader,
+            serialize(name, value, options),
+          ]);
+        },
+        remove(name: string, options: CookieOptions) {
+          let setCookieHeader = res.getHeader("Set-Cookie") || [];
+          if (!Array.isArray(setCookieHeader)) {
+            setCookieHeader = [setCookieHeader.toString()];
+          }
+          res.setHeader("Set-Cookie", [
+            ...setCookieHeader,
+            serialize(name, "", { ...options, maxAge: -1 }),
+          ]);
+        },
+      },
     }
   );
 
