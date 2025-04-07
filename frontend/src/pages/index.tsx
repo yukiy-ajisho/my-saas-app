@@ -100,7 +100,8 @@ export default function Home() {
         options: {
           // Use the HARDCODED URL for local testing
           redirectTo: hardcodedLocalRedirectUrl,
-        },
+        },                  
+        
       });
       if (error) throw error;
     } catch (error: any) {
