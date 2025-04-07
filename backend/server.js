@@ -3,138 +3,45 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-const cookieParser = require("cookie-parser"); // Import cookie-parser
 
 const app = express();
 const port = process.env.PORT || 3001;
 const supabaseJwtSecret = process.env.SUPABASE_JWT_SECRET;
-
-// Extract Supabase project reference from URL for cookie name
 const supabaseUrl = process.env.SUPABASE_URL;
-if (!supabaseUrl) {
-  console.error("Error: SUPABASE_URL is not set.");
-  process.exit(1);
-}
-const projectRefMatch = supabaseUrl.match(
-  /https:\/\/([a-zA-Z0-9]+)\.supabase\.co/
-);
-const supabaseProjectRef = projectRefMatch ? projectRefMatch[1] : null;
-if (!supabaseProjectRef) {
-  console.error(
-    "Error: Could not extract Supabase project reference from URL."
-  );
-  process.exit(1);
-}
-const supabaseAuthCookieName = `sb-${supabaseProjectRef}-auth-token`;
-console.log(`Expecting Supabase auth cookie: ${supabaseAuthCookieName}`);
 
-if (!supabaseJwtSecret) {
-  console.error(
-    "Error: SUPABASE_JWT_SECRET is not set in environment variables."
-  );
+if (!supabaseJwtSecret || !supabaseUrl) {
+  console.error("Error: SUPABASE_JWT_SECRET or SUPABASE_URL is not set.");
   process.exit(1);
 }
 
 // Middleware
 app.use(
   cors({
-    origin: "https://my-saas-app-ashen.vercel.app", // Allow only your Vercel app
-    credentials: true, // IMPORTANT: Allow cookies to be sent from frontend
+    origin: "https://my-saas-app-ashen.vercel.app",
   })
 );
-app.use(cookieParser()); // Use cookie-parser middleware
 app.use(express.json());
 
-// --- Authentication Middleware ---
+// --- Authentication Middleware (Check Authorization Header) ---
 const authenticateToken = (req, res, next) => {
-  console.log("--- Authenticate Token Middleware Start ---");
-  console.log("Received cookies:", req.cookies); // Log all received cookies
+  console.log("--- Authenticate Token Middleware Start (Header Check) ---");
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
-  const tokenFromCookie = req.cookies[supabaseAuthCookieName];
-  console.log(
-    `Value from cookie '${supabaseAuthCookieName}':`,
-    tokenFromCookie
-  );
-
-  if (tokenFromCookie == null) {
-    console.log("Auth cookie not found or empty.");
-    return res.sendStatus(401); // 401: Unauthorized (Missing credentials)
+  if (token == null) {
+    console.log("Authorization header missing or token not found.");
+    return res.sendStatus(401); // 401: Unauthorized
   }
 
-  // Supabase SSR cookie format can be complex (e.g., JSON array)
-  // Extract the actual JWT (usually starts with 'ey')
-  let actualToken = null;
-  try {
-    if (
-      typeof tokenFromCookie === "string" &&
-      tokenFromCookie.startsWith("[") &&
-      tokenFromCookie.endsWith("]")
-    ) {
-      // Attempt to parse if it looks like a JSON array string
-      const parsedArray = JSON.parse(tokenFromCookie);
-      if (Array.isArray(parsedArray)) {
-        actualToken = parsedArray.find(
-          (t) => typeof t === "string" && t.startsWith("ey")
-        );
-        if (
-          !actualToken &&
-          parsedArray.length > 0 &&
-          typeof parsedArray[0] === "string"
-        ) {
-          // Fallback: Assume the first string element if no typical JWT found
-          actualToken = parsedArray[0];
-          console.log(
-            "Extracted token (fallback from array[0]):",
-            actualToken ? actualToken.substring(0, 10) + "..." : null
-          );
-        } else {
-          console.log(
-            "Extracted token (found JWT in array):",
-            actualToken ? actualToken.substring(0, 10) + "..." : null
-          );
-        }
-      } else {
-        console.log(
-          "Cookie value looked like array but failed to parse or wasn't array."
-        );
-      }
-    } else if (typeof tokenFromCookie === "string") {
-      // If it's just a string, assume it's the token directly
-      actualToken = tokenFromCookie;
-      console.log(
-        "Using cookie value directly as token:",
-        actualToken.substring(0, 10) + "..."
-      );
-    } else {
-      console.log(
-        "Cookie value is not a parseable string or array-like string."
-      );
-    }
-  } catch (parseError) {
-    console.error("Error parsing cookie value:", parseError);
-    // Treat as if token wasn't found
-  }
+  console.log(`Verifying token from header: ${token.substring(0, 15)}...`);
 
-  if (actualToken == null) {
-    console.log("Could not extract a valid JWT from the auth cookie value.");
-    return res.sendStatus(401); // Can't find token within cookie
-  }
-
-  console.log(`Verifying extracted token: ${actualToken.substring(0, 15)}...`);
-
-  jwt.verify(actualToken, supabaseJwtSecret, (err, user) => {
+  jwt.verify(token, supabaseJwtSecret, (err, user) => {
     if (err) {
-      // CRITICAL LOG: Look for this if 401/403 occurs
-      console.error(
-        ">>> JWT Verification Error <<<:",
-        err.message,
-        "Token received:",
-        actualToken.substring(0, 15) + "..."
-      );
-      return res.sendStatus(403); // 403: Forbidden (Invalid/Expired Token)
+      console.error(">>> JWT Verification Error <<<:", err.message);
+      return res.sendStatus(403); // 403: Forbidden (Invalid Token)
     }
     req.user = user;
-    console.log("JWT Verified. User ID:", req.user.sub);
+    console.log("JWT Verified via Header. User ID:", req.user.sub);
     console.log("--- Authenticate Token Middleware End (Success) ---");
     next();
   });

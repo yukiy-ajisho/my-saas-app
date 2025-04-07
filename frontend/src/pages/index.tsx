@@ -16,15 +16,10 @@ interface Todo {
 // Define a type for the Supabase client
 type TypedSupabaseClient = SupabaseClient<Record<string, any>>; // Use a generic or define your DB types
 
-// Read API URL from environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-if (!API_URL) {
-  // Provide a fallback or throw an error if the variable isn't set
-  console.error("Error: NEXT_PUBLIC_API_URL environment variable is not set.");
-  // You might want to throw an error or set a default for local dev here
-  // For now, we'll let it potentially fail later if unset, but log the error.
-}
+// API URL setup - Point to the local proxy route
+const PROXY_API_URL = "/api/proxy/todos";
+// Keep the Render URL maybe for reference or other direct calls if needed?
+// const RENDER_BACKEND_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // Custom Arrow Components for the Slider
 const PrevArrow = ({ onClick }: CustomArrowProps) => {
@@ -127,59 +122,59 @@ export default function Home() {
     }
   }, [session]); // Re-run when session changes
 
-  // --- API Call Modifications ---
+  // --- API Call Modifications (Use Proxy URL, remove credentials: include) ---
 
   const fetchTodos = async () => {
-    if (!API_URL || !session) return;
+    // Use PROXY_API_URL
+    if (!session) return; // Only need session check now
     try {
       setError(null);
-      // Browser sends cookie automatically, remove Authorization header
-      const response = await fetch(`${API_URL}/api/todos`, {
-        credentials: "include",
-      }); // IMPORTANT: include credentials
+      // Request to local proxy, browser sends cookie automatically (same-origin)
+      const response = await fetch(PROXY_API_URL);
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           setError(
-            "Authentication failed fetching todos. Please log in again."
+            "Authentication failed fetching todos via proxy. Please log in again."
           );
           setTodos([]);
         } else {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.text(); // Get error text from proxy
+          console.error("Proxy fetch error:", response.status, errorData);
+          throw new Error(`Proxy HTTP error! status: ${response.status}`);
         }
       } else {
         const data: Todo[] = await response.json();
         setTodos(data);
       }
     } catch (e: any) {
-      console.error("Failed to fetch todos:", e);
-      setError(
-        "Failed to load todos. Is the backend running and are you logged in?"
-      );
+      console.error("Failed to fetch todos via proxy:", e);
+      setError("Failed to load todos via proxy.");
       setTodos([]);
     }
   };
 
   const handleAddTask = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!newTask.trim() || !API_URL || !session) return;
+    // Use PROXY_API_URL
+    if (!newTask.trim() || !session) return;
     try {
       setError(null);
-      // Remove Authorization header, browser sends cookie
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       };
-      const response = await fetch(`${API_URL}/api/todos`, {
+      const response = await fetch(PROXY_API_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({ task: newTask }),
-        credentials: "include", // IMPORTANT: include credentials
+        // No credentials: 'include' needed for same-origin
       });
-
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          setError("Authentication failed adding todo.");
+          setError("Authentication failed adding todo via proxy.");
         } else {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.text();
+          console.error("Proxy add error:", response.status, errorData);
+          throw new Error(`Proxy HTTP error! status: ${response.status}`);
         }
       } else {
         const addedTodo: Todo = await response.json();
@@ -189,39 +184,40 @@ export default function Home() {
         sliderRef.current?.slickGoTo(0);
       }
     } catch (e: any) {
-      console.error("Failed to add todo:", e);
-      setError("Failed to add todo.");
+      console.error("Failed to add todo via proxy:", e);
+      setError("Failed to add todo via proxy.");
     }
   };
 
   const handleDeleteTodo = async (id: string) => {
-    if (!API_URL || !session) return;
+    // Use PROXY_API_URL
+    if (!session) return;
     try {
       setError(null);
-      // Remove Authorization header, browser sends cookie
-      const response = await fetch(`${API_URL}/api/todos/${id}`, {
+      const response = await fetch(`${PROXY_API_URL}/${id}`, {
         method: "DELETE",
-        credentials: "include", // IMPORTANT: include credentials
+        // No credentials: 'include' needed for same-origin
       });
-
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          setError("Authentication failed deleting todo.");
+          setError("Authentication failed deleting todo via proxy.");
         } else if (response.status === 404) {
           console.warn(
-            "Attempted to delete non-existent or unauthorized todo:",
+            "Attempted to delete non-existent or unauthorized todo via proxy:",
             id
           );
           setTodos(todos.filter((todo) => todo.id !== id));
         } else {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.text();
+          console.error("Proxy delete error:", response.status, errorData);
+          throw new Error(`Proxy HTTP error! status: ${response.status}`);
         }
       } else {
         setTodos(todos.filter((todo) => todo.id !== id));
       }
     } catch (e: any) {
-      console.error("Failed to delete todo:", e);
-      setError(`Failed to delete todo: ${e.message}`);
+      console.error("Failed to delete todo via proxy:", e);
+      setError(`Failed to delete todo via proxy: ${e.message}`);
     }
   };
 
