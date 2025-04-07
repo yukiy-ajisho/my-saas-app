@@ -14,12 +14,16 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  // Use NEXT_PUBLIC_SITE_URL or infer from headers for reliable origin
+  // Determine the site URL from environment or headers
+  // IMPORTANT: This should be the FRONTEND URL, not the API URL
   const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL || // Use explicit env var if set
+    // Otherwise, infer from request headers (use NEXT_PUBLIC_VERCEL_URL on Vercel)
     `http${process.env.NODE_ENV === "production" ? "s" : ""}://${
-      req.headers.host
+      process.env.NEXT_PUBLIC_VERCEL_URL || req.headers.host
     }`;
+
+  // Construct the full request URL to easily access query params
   const requestUrl = new URL(req.url!, siteUrl);
   const code = requestUrl.searchParams.get("code");
   const next = requestUrl.searchParams.get("next") || "/"; // Get optional redirect path
@@ -107,10 +111,10 @@ export default async function handler(
     );
   }
 
-  // Redirect back to origin or 'next' path
+  // Redirect back to origin or 'next' path after sign in process completes
   const redirectPath = next.startsWith("/") ? next : "/" + next;
   console.log(
-    `Auth callback successful, redirecting to: ${siteUrl}${redirectPath}`
+    `Auth callback successful, calculated siteUrl: ${siteUrl}, calculated redirectPath: ${redirectPath}, final redirect target: ${siteUrl}${redirectPath}`
   );
   return res.redirect(`${siteUrl}${redirectPath}`);
 }

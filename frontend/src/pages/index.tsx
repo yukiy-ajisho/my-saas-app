@@ -81,20 +81,28 @@ export default function Home() {
   }, [supabase.auth]); // Depend on supabase.auth
 
   const handleLogin = async () => {
-    setError(null); // Clear previous errors
+    setError(null);
     try {
-      // Construct the callback URL dynamically
-      const redirectUrl = `${window.location.origin}/api/auth/callback`;
-      console.log("Initiating login, redirectTo:", redirectUrl); // Add log
+      // Construct the callback URL dynamically (We keep this for reference)
+      // const redirectUrl = `${window.location.origin}/api/auth/callback`;
+      // console.log("Initiating login, dynamic redirectTo would be:", redirectUrl);
+
+      // --- HARDCODED for LOCAL TESTING ONLY ---
+      const hardcodedLocalRedirectUrl =
+        "http://localhost:3000/api/auth/callback";
+      console.warn(
+        "Using HARDCODED local redirect URL for testing:",
+        hardcodedLocalRedirectUrl
+      );
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: redirectUrl,
+          // Use the HARDCODED URL for local testing
+          redirectTo: hardcodedLocalRedirectUrl,
         },
       });
       if (error) throw error;
-      // Note: Redirection happens, state updates via onAuthStateChange
     } catch (error: any) {
       setError(`Google Login Failed: ${error.message}`);
       console.error("Google Login Error:", error);
