@@ -270,11 +270,12 @@ export default function Home() {
       </Head>
 
       <main style={styles.main}>
-        <h1 style={styles.testText}>TEST</h1>
-        <div style={styles.headerContainer}>
+        <h1>TEST</h1>
+        {/* <div style={styles.headerContainer}>
           <h1 style={styles.title}>✨ Task Master</h1>
           <p style={styles.subtitle}>Organize your day, achieve your goals</p>
-        </div>
+        </div> */}
+        <h1 style={styles.title}>My Todos</h1>
 
         {/* Auth Buttons */}
         <div style={styles.authContainer}>
@@ -545,18 +546,5 @@ const styles = {
   googleIcon: {
     width: '20px',
     height: '20px',
-  },
-  testText: {
-    fontSize: '8rem',
-    fontWeight: 'bold',
-    color: '#0A192F',
-    position: 'absolute' as 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    margin: 0,
-    zIndex: 1,
-    letterSpacing: '0.2em',
-    textTransform: 'uppercase' as 'uppercase',
   },
 };
