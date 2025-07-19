@@ -39,6 +39,7 @@ const NextArrow = ({ onClick }: CustomArrowProps) => {
 };
 
 export default function Home() {
+  
   const [supabase] = useState<TypedSupabaseClient>(() =>
     createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -269,20 +270,27 @@ export default function Home() {
       </Head>
 
       <main style={styles.main}>
-        <h1 style={styles.title}>My Todos</h1>
+        <h1 style={styles.testText}>TEST</h1>
+        <div style={styles.headerContainer}>
+          <h1 style={styles.title}>✨ Task Master</h1>
+          <p style={styles.subtitle}>Organize your day, achieve your goals</p>
+        </div>
 
         {/* Auth Buttons */}
         <div style={styles.authContainer}>
           {user ? (
             <div style={styles.userInfo}>
-              <span>Logged in as: {user.email}</span>
-              <button onClick={handleLogout} style={styles.button}>
-                Logout
+              <div style={styles.userEmail}>
+                <img src="/user-circle.svg" alt="User" style={styles.userIcon} />
+                <span>{user.email}</span>
+              </div>
+              <button onClick={handleLogout} style={styles.logoutButton}>
+                Sign Out
               </button>
             </div>
           ) : (
-            <button onClick={handleLogin} style={styles.button}>
-              Login with Google
+            <button onClick={handleLogin} style={styles.loginButton}>
+              Continue with Google
             </button>
           )}
         </div>
@@ -351,10 +359,20 @@ const styles = {
     alignItems: "center" as "center",
   },
   title: {
-    margin: "0 0 1rem 0", // Reduced bottom margin
+    margin: 0,
     lineHeight: 1.15,
-    fontSize: "3rem",
-    textAlign: "center" as "center",
+    fontSize: '3rem',
+    background: 'linear-gradient(to right, #ffffff, #e0e7ff)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    textAlign: 'center' as 'center',
+    fontWeight: 'bold',
+  },
+  subtitle: {
+    fontSize: '1.2rem',
+    color: '#e0e7ff',
+    marginTop: '0.5rem',
+    fontWeight: '500',
   },
   error: {
     color: "red",
@@ -464,14 +482,81 @@ const styles = {
   },
   // Auth Styles
   authContainer: {
-    marginBottom: "2rem",
-    width: "100%",
-    display: "flex",
-    justifyContent: "center",
+    marginBottom: '2rem',
+    width: '100%',
+    maxWidth: '400px',
+    display: 'flex',
+    justifyContent: 'center',
   },
   userInfo: {
-    display: "flex",
-    alignItems: "center",
-    gap: "1rem",
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    background: '#f9fafb',
+    padding: '0.75rem 1rem',
+    borderRadius: '12px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  userEmail: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    color: '#374151',
+    fontSize: '0.95rem',
+  },
+  userIcon: {
+    width: '24px',
+    height: '24px',
+  },
+  loginButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.75rem 1.5rem',
+    border: '1px solid #e5e7eb',
+    borderRadius: '12px',
+    backgroundColor: 'white',
+    color: '#374151',
+    fontSize: '1rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    ':hover': {
+      backgroundColor: '#f9fafb',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+    },
+  },
+  logoutButton: {
+    padding: '0.5rem 1rem',
+    border: 'none',
+    borderRadius: '8px',
+    backgroundColor: '#ef4444',
+    color: 'white',
+    fontSize: '0.95rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    ':hover': {
+      backgroundColor: '#dc2626',
+    },
+  },
+  googleIcon: {
+    width: '20px',
+    height: '20px',
+  },
+  testText: {
+    fontSize: '8rem',
+    fontWeight: 'bold',
+    color: '#0A192F',
+    position: 'absolute' as 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    margin: 0,
+    zIndex: 1,
+    letterSpacing: '0.2em',
+    textTransform: 'uppercase' as 'uppercase',
   },
 };
